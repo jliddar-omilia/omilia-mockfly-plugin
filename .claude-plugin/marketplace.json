@@ -9,7 +9,7 @@
     {
       "name": "mockfly",
       "source": "./plugins/mockfly",
-      "description": "Connects Claude Code to Mockfly (mock API generator) via its official MCP server, plus skills for project/endpoint management and the offline CLI"
+      "description": "Connects Claude Code to Mockfly (mock API generator) via its public REST API, plus skills for project/endpoint management and the offline CLI"
     }
   ]
 }

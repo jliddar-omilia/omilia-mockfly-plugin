@@ -90,5 +90,5 @@ offline. Nothing is written back: to change a mock, edit it in the web app
 
 ## Related Skills
 
-- **mockfly-mcp** — connect Claude Code to Mockfly's cloud API directly
+- **mockfly-api** — call Mockfly's cloud API directly, auth and endpoint reference
 - **mockfly-projects** — create/edit the projects this CLI then serves offline

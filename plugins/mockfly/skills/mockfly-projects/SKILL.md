@@ -2,23 +2,25 @@
 name: mockfly-projects
 description: >-
   Create, import, and edit Mockfly mock-API projects, endpoints, responses,
-  and conditional rules using the Mockfly MCP tools. Use when asked to spin
-  up a mock API, turn an OpenAPI/Postman/HAR file into mock endpoints, add or
-  change a mock response, or make a mock respond differently based on the
-  request. Trigger terms: mock API, mock endpoint, Mockfly project, import
-  OpenAPI, import Postman collection, conditional response, mock rules.
+  and conditional rules by calling Mockfly's public REST API. Use when asked
+  to spin up a mock API, turn an OpenAPI/Postman/HAR file into mock
+  endpoints, add or change a mock response, or make a mock respond
+  differently based on the request. Trigger terms: mock API, mock endpoint,
+  Mockfly project, import OpenAPI, import Postman collection, conditional
+  response, mock rules.
 license: MIT
-compatibility: mockfly-mcp-client tool catalog (see mockfly-mcp skill)
+compatibility: Mockfly public REST API (see mockfly-api skill)
 metadata:
   author: Omilia — community integration, not officially maintained by Mockfly
-  version: "0.1.0"
+  version: "0.2.0"
   category: development
 ---
 
 # Mockfly Projects, Endpoints, and Responses
 
-Day-to-day workflows for managing Mockfly mocks through the MCP tools. If
-MCP tools aren't connected yet, use **mockfly-mcp** first.
+Day-to-day workflows for managing Mockfly mocks via `curl` calls to the
+public API. If auth isn't set up yet, use **mockfly-api** first — it also
+has the full endpoint reference these workflows call.
 
 ## Concepts
 
@@ -34,58 +36,63 @@ by rules, or a single default response with no rules.
 
 ## Free Plan Limits
 
-Enforced identically through the MCP tools and the dashboard:
+Enforced identically through the API and the dashboard:
 
 - 1 project as admin
 - 4 endpoints per project
 - 2 responses per endpoint
 
-A `create_endpoint` or `create_response` call beyond these limits returns
-429. Don't retry — either delete something to make room or note the limit
-back to the user; there's no MCP-side override.
+A `POST` beyond these limits returns 429. Don't retry — either delete
+something to make room or note the limit back to the user; there's no
+API-side override.
 
 ## Common Workflows
 
 ### Start a mock project from scratch
 
-1. `create_project` — name it, get back a project id and its project API key
-2. `create_endpoint` — define method + path
-3. `create_response` — attach at least one response (status + body)
-4. Optionally `modify_rules` if you need more than one response
+1. `POST /public/projects` (account key) — name it, get back a project id and its project API key
+2. `POST /public/endpoints` (project key) — define method + path
+3. `POST /public/endpoints/:endpointId/responses` — attach at least one response (status + body)
+4. Optionally `PUT /public/endpoints/:endpointId/responses/:responseId/rules` if you need more than one response
+
+Check `https://mockfly.dev/openapi.json` for each request body before
+sending it — don't guess field names.
 
 ### Turn an existing spec into a mock
 
-Use `import_project` (account key) with an OpenAPI, Postman collection, or
-HAR file — it creates the project and its endpoints/responses in one call,
-rather than building them up individually. Confirm with the user which
-source file to import before running this — it consumes one of their
-project slots.
+`POST /public/projects/import` (account key) with an OpenAPI, Postman
+collection, or HAR file — it creates the project and its endpoints/
+responses in one call, rather than building them up individually. Fetch
+the OpenAPI spec first to confirm exactly how the import body should be
+shaped (e.g. inline content vs. a URL). Confirm with the user which source
+file to import before running this — it consumes one of their project
+slots.
 
 ### Add an error-path or edge-case response
 
-1. `get_endpoint_detail` to see existing responses and rules on that endpoint
-2. `create_response` for the new case (e.g. a 500, a timeout via `delay`, a
+1. `GET /public/endpoints/:endpointId` to see existing responses and rules on that endpoint
+2. `POST /public/endpoints/:endpointId/responses` for the new case (e.g. a 500, a timeout via `delay`, a
    malformed payload)
-3. `modify_rules` so the right request pattern routes to it — e.g. a query
+3. `PUT .../rules` so the right request pattern routes to it — e.g. a query
    param `?simulate=error`, or a specific header/body value
 
 Don't silently overwrite an existing default response when the ask is to
-*add* a case — `duplicate_response` first if you want to branch from it.
+*add* a case — duplicate it first (`POST .../responses/:responseId/duplicate`) if you want to branch from it.
 
 ### Update vs. delete
 
-`update_project` / `edit_endpoint` / `edit_response` change in place and
-keep the same id — prefer these over delete+recreate, since delete also
-drops history and any rules attached to what you removed.
+`PATCH` on a project/endpoint/response changes in place and keeps the same
+id — prefer this over delete+recreate, since delete also drops history and
+any rules attached to what you removed.
 
 ## Reading Back State
 
-Before creating or editing, prefer `get_endpoints` / `get_endpoint_detail`
-over assuming what's already there — Mockfly projects are often edited by
-hand in the web app between Claude Code sessions, so cached assumptions
-about existing endpoints can be stale.
+Before creating or editing, prefer `GET /public/endpoints` /
+`GET /public/endpoints/:endpointId` over assuming what's already there —
+Mockfly projects are often edited by hand in the web app between Claude
+Code sessions, so cached assumptions about existing endpoints can be stale.
 
 ## Related Skills
 
-- **mockfly-mcp** — connect and authenticate the MCP server, full tool list
+- **mockfly-api** — auth, full endpoint reference, curl examples, troubleshooting
 - **mockfly-cli** — serve a pulled snapshot of a project locally, offline

@@ -1,28 +1,14 @@
 {
   "name": "mockfly",
   "displayName": "Mockfly",
-  "version": "0.1.1",
-  "description": "Manage Mockfly hosted mock APIs from Claude Code: create/import projects, edit endpoints and responses, set conditional rules, and run mocks offline.",
+  "version": "0.2.0",
+  "description": "Manage Mockfly hosted mock APIs from Claude Code by calling its public REST API directly: create/import projects, edit endpoints and responses, set conditional rules, and run mocks offline.",
   "author": {
     "name": "Jimmy Liddar",
     "email": "jliddar@omilia.com"
   },
-  "homepage": "https://mockfly.dev/docs/mockfly-mcp-client/",
+  "homepage": "https://mockfly.dev/docs/public-api/",
   "repository": "https://github.com/liddar12/omilia-mockfly-plugin",
   "license": "MIT",
-  "keywords": ["mockfly", "mock-api", "mcp", "testing", "api-mocking"],
-  "userConfig": {
-    "mockfly_account_api_key": {
-      "type": "string",
-      "title": "Mockfly account API key",
-      "description": "From app.mockfly.dev/api-keys. Needed for project-level operations: create, import, update, delete.",
-      "sensitive": true
-    },
-    "mockfly_api_key": {
-      "type": "string",
-      "title": "Mockfly project API key",
-      "description": "From a project's settings page in the Mockfly dashboard. Needed for endpoint, response, and rule operations.",
-      "sensitive": true
-    }
-  }
+  "keywords": ["mockfly", "mock-api", "testing", "api-mocking"]
 }
