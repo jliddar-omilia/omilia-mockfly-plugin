@@ -94,7 +94,7 @@ if [ -z "$SLUG" ] || [ -z "$PROJECT_ID" ]; then
   exit 1
 fi
 
-MOCK_URL="https://${SLUG}.mockfly.dev"
+MOCK_URL="https://api.mockfly.dev/mocks/${SLUG}"
 echo "Mock base URL: $MOCK_URL"
 echo "PASS  import returned a slug and project id"
 PASS=$((PASS+1))
@@ -111,7 +111,7 @@ curl_code() {
   local url="$1"; shift
   local err
   local code
-  if ! code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$url" "$@" 2>/tmp/verify-mockfly-curl-err.$$); then
+  if ! code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "$url" "$@" 2>/tmp/verify-mockfly-curl-err.$$); then
     err=$(cat /tmp/verify-mockfly-curl-err.$$)
     rm -f /tmp/verify-mockfly-curl-err.$$
     echo "  (curl failed at the network level: $err)" >&2
