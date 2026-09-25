@@ -14,7 +14,7 @@ license: MIT
 compatibility: Mockfly public REST API (see mockfly-api skill)
 metadata:
   author: Omilia — community integration, not officially maintained by Mockfly
-  version: "0.5.0"
+  version: "0.6.0"
   category: development
 ---
 
@@ -24,17 +24,25 @@ Day-to-day workflows for managing Mockfly mocks via `curl` calls to the
 public API. If auth isn't set up yet, use **mockfly-api** first — it also
 has the full endpoint reference these workflows call.
 
+This file is written against the actual OpenAPI schema at
+`https://mockfly.dev/openapi.json` (fetched and parsed directly, not
+summarized) — pull the current version before relying on an exact field
+name here; Mockfly can add fields without notice.
+
 ## Concepts
 
 | Term | Meaning |
 |---|---|
-| Project | A container of mock endpoints, served at its own subdomain/slug under `https://api.mockfly.dev/mocks/{namespace}` |
+| Project | A container of mock endpoints. Its mock server is served at `https://<slug>.mockfly.dev`, where `slug` comes back on the `Project` object from create/import — **not** `api.mockfly.dev/mocks/{namespace}`, despite what an earlier version of this file said |
 | Endpoint | One mocked route: a method + path (e.g. `GET /users/:id`) |
-| Response | One possible reply for an endpoint — status, body, headers, delay |
-| Rules | Conditions (on query, body, headers, etc.) that pick which response fires for a given request |
+| Response | One possible reply for an endpoint — status, body, `isEnabled`, `rules` |
+| Rules | Conditions (`Rule` or a `RuleGroup` of them) that pick which response fires for a given request |
 
-An endpoint can have multiple responses (success, error, edge case) selected
-by rules, or a single default response with no rules.
+An endpoint can have multiple responses (success, error, edge case) picked
+by rules, or a single unconditional one with no rules — that unconditional
+one is what serves as the fallback ("default") when nothing else matches.
+`PATCH /public/endpoints/:endpointId` with `defaultResponse: <responseId>`
+sets this explicitly instead of relying on convention.
 
 ## Free Plan Limits
 
@@ -46,37 +54,50 @@ Enforced identically through the API and the dashboard:
 
 A `POST` beyond these limits returns 429. Don't retry — either delete
 something to make room or note the limit back to the user; there's no
-API-side override.
+API-side override. Doesn't apply on a paid plan.
 
 ## Common Workflows
 
 ### Start a mock project from scratch
 
-1. `POST /public/projects` (account key) — name it, get back a project id and its project API key
+1. `POST /public/projects` (account key) — name it, get back a project id, `slug` (its mock URL: `https://<slug>.mockfly.dev`), and `privateApiKey` (the project key — save it, it's only returned here and on update)
 2. `POST /public/endpoints` (project key) — define method + path
-3. `POST /public/endpoints/:endpointId/responses` — attach at least one response (status + body)
-4. Optionally `PUT /public/endpoints/:endpointId/responses/:responseId/rules` if you need more than one response
+3. `POST /public/endpoints/:endpointId/responses` — attach at least one response. **Include `rules` directly in this call** (`CreateResponseRequest` takes a `rules` array) rather than following up with a separate `PUT .../rules` call — same result, one fewer round trip.
 
 Check `https://mockfly.dev/openapi.json` for each request body before
 sending it — don't guess field names.
 
-### Turn an existing spec into a mock
+### Turn an existing OpenAPI/Postman/HAR spec into a mock
 
-`POST /public/projects/import` (account key) with an OpenAPI, Postman
-collection, or HAR file — it creates the project and its endpoints/
-responses in one call, rather than building them up individually. Fetch
-the OpenAPI spec first to confirm exactly how the import body should be
-shaped (e.g. inline content vs. a URL). Confirm with the user which source
-file to import before running this — it consumes one of their project
-slots.
+**The import endpoint does not accept a raw spec file.** `POST
+/public/projects/import` takes Mockfly's own shape
+(`ImportProjectRequest`: `{project: {name}, endpoints: [...], folders,
+environment}`), described in the schema as "the dashboard's Export to
+JSON payload." Mockfly's OpenAPI/Postman/HAR import is a dashboard-only
+convenience — the web UI parses the file and converts it before saving;
+the public API doesn't expose that conversion step.
+
+So to import a spec via the API, do the conversion yourself first:
+
+1. Parse the source spec (fetch/read it, don't guess its shape)
+2. For each operation, build an `ImportEndpoint`: `{path, method,
+   responses: [...]}` — map path parameters to Mockfly's `:param` syntax,
+   and derive at least one `ImportEndpointResponse` (`{status, body,
+   rules}`) per operation from its documented example/schema
+3. `POST /public/projects/import` (account key) with the assembled
+   `{project: {name}, endpoints: [...]}` body — creates everything in one
+   call
+
+This is the same mechanism the demo-data-generator procedure below uses,
+just without the seed-data/magic-value/auth-rule layers.
 
 ### Add an error-path or edge-case response
 
 1. `GET /public/endpoints/:endpointId` to see existing responses and rules on that endpoint
-2. `POST /public/endpoints/:endpointId/responses` for the new case (e.g. a 500, a timeout via `delay`, a
-   malformed payload)
-3. `PUT .../rules` so the right request pattern routes to it — e.g. a query
-   param `?simulate=error`, or a specific header/body value
+2. `POST /public/endpoints/:endpointId/responses` for the new case (status, body, and its `rules` in the same call)
+3. If adding to an *existing* response instead of a new one, `PUT
+   .../rules` replaces that response's whole rule set — it's a full
+   replace, not a merge, so include the rules you want to keep
 
 Don't silently overwrite an existing default response when the ask is to
 *add* a case — duplicate it first (`POST .../responses/:responseId/duplicate`) if you want to branch from it.
@@ -84,8 +105,36 @@ Don't silently overwrite an existing default response when the ask is to
 ### Update vs. delete
 
 `PATCH` on a project/endpoint/response changes in place and keeps the same
-id — prefer this over delete+recreate, since delete also drops history and
-any rules attached to what you removed.
+id — prefer this over delete+recreate, since delete also drops
+`bodyHistory` (the last 5 versions of a response body, visible via
+`GET /public/endpoints/:endpointId`) and any rules attached to what you
+removed.
+
+### Other capabilities worth knowing about
+
+- **Gradual mock-to-real cutover, per endpoint.** `proxyConfiguration` on
+  `CreateEndpointRequest`/`UpdateEndpointRequest` takes `default` (follows
+  the project setting), `useProxy` (always forward to the real API), or
+  `useMock` (always serve the mock). Useful for switching one endpoint
+  over to a real backend while the rest stay mocked, without touching
+  anything else. The project-wide equivalent (`Project.useProxy` /
+  `proxyUrl`) is dashboard-only — not settable through `UpdateProjectRequest`.
+- **Response history for free.** `bodyHistory` on each response (via
+  `GET /public/endpoints/:endpointId`) holds the last 5 versions with
+  timestamps — check it before assuming an update call silently failed.
+- **Non-JSON responses.** A `content-type` header in an endpoint's
+  `headers` array (`application/xml`, `text/xml`, `application/pdf`,
+  `text/csv` are the accepted values besides JSON) switches the whole
+  endpoint's format. This is endpoint-wide, not per-response.
+- **No account needed for trivial cases.** `GET /hub/catalog` (no auth)
+  lists Mockfly's free public sample APIs — each with pagination and
+  `_delay`/`_status` query params for quick error/latency testing. Skip
+  the whole account-setup flow if a demo just needs *some* working mock,
+  not a specific shape.
+- **Team access is dashboard-only.** `Project.allowedUsers` is read-only
+  through the API — there's no endpoint to grant a colleague access to a
+  project. Sharing a project means sharing dashboard access, not an API
+  call.
 
 ## Using with demo-data-generator
 
@@ -93,88 +142,94 @@ any rules attached to what you removed.
 `output/{group_name}/server/openapi/{group_name}_api.yaml`, meant to be
 deployed as a custom FastAPI server on Render. That spec — plus the seed
 data and magic test values that server implements — can be reproduced on
-Mockfly with a scripted sequence of API calls, not just the one import
-call. Only one step at the end is actually manual.
+Mockfly in **one `import` call**, using the same `ImportEndpointResponse.
+rules` mechanism from the general import workflow above. Only one step at
+the end is genuinely manual, and one magic value can't be faithfully
+reproduced at all.
 
-**Requires a paid Mockfly plan.** Full replication needs many responses
-per endpoint (one per seed record, plus the magic values, plus the auth
-check) — the free plan's 2-responses-per-endpoint cap makes this
-impractical. On free, stop after step 1 and accept the gaps from the
-previous version of this section.
+**Requires a paid Mockfly plan.** Full replication needs several
+responses per endpoint (one per seed record, plus magic values, plus the
+auth check) — the free plan's 2-responses-per-endpoint cap makes this
+impractical. On free, stop after the plain import and accept the gaps
+described in "What this gets you" below.
 
 ### The procedure
 
-1. **Import the spec**: `POST /public/projects/import` (account key) with
-   the OpenAPI YAML — creates the project and endpoint scaffolding. Note
-   the project's mock base URL from the response
-   (`https://api.mockfly.dev/mocks/{namespace}`) — you'll need it in step 5.
-
-2. **Find and read the seed data.** Look for `seed_data.json` under
-   `output/{group_name}/server/` first — that's the path the top-level
+1. **Find the seed data and the spec.** Look under
+   `output/{group_name}/server/` for `seed_data.json` and
+   `openapi/{group_name}_api.yaml` — that's the path the top-level
    generated-file tree in demo-data-generator's own SKILL.md documents.
    Its `references/mock-api-patterns.md` shows a slightly different
-   internal path (`data/seed_data.json`) in an architecture example — if
-   the first path doesn't exist, check the actual generated output tree
-   for wherever it landed rather than assuming either path is right.
+   internal path (`data/seed_data.json`) in an architecture example; if
+   the first path doesn't exist, check the real output tree instead of
+   assuming either is right.
 
-3. **Recreate each seed record as a response, per identifier-taking
-   endpoint.** For each endpoint that looks something up by an identifier
-   (account number, member ID, etc. — check the endpoint's OpenAPI
-   parameters), and for each seed record in `seed_data.json`:
-   - `POST /public/endpoints/:endpointId/responses` — body is that
-     record's real fields, shaped to match the endpoint's response schema
-   - `PUT .../responses/:responseId/rules` — rule: the identifier param
-     `equal` that record's identifier value
-   
-   Confirm current rule semantics against
-   `https://mockfly.dev/docs/conditional-response-mock-api/` before
-   building these — as of this writing, responses on one endpoint use
-   **last-match-wins** (when several rules match, the last one in the
-   list is served), and the endpoint's one designated default response is
-   the fallback when nothing matches. Add these seed-record responses
-   right after the default.
+2. **Build one `ImportProjectRequest` covering everything, then send it
+   in a single call.** For each endpoint in the OpenAPI spec that looks
+   something up by an identifier (account number, member ID, etc.),
+   assemble its `responses` array in this order (order matters —
+   Mockfly evaluates responses **last-match-wins**, confirmed against
+   `https://mockfly.dev/docs/conditional-response-mock-api/`: when
+   several rules match, the last one in the list wins):
+   1. A default response with **no rules** — a generic not-found body,
+      matching what the real server returns for an unknown identifier
+   2. One response per seed record, each with a rule: the identifier
+      param `equal` that record's value, and a body built from that
+      record's actual fields
+   3. The magic values (see below)
+   4. The `X-API-Key` check, added **last** so it overrides everything
+      above when it fires
 
-4. **Add the magic test values, after the seed responses** (so they win
-   under last-match-wins if a request somehow collides — it shouldn't,
-   since `ERROR-TEST` etc. aren't real seed identifiers, but order still
-   matters for correctness):
+   `POST /public/projects/import` (account key) with the whole thing —
+   project, all endpoints, all responses, all rules, in one call.
+
+3. **Magic values**, added after the seed responses in each endpoint's
+   array:
    - `ERROR-TEST` → rule: identifier `equal` `"ERROR-TEST"` → response
      status 500
-   - `TIMEOUT-TEST` → same pattern → response with Mockfly's response
-     `delay` field set to match the ~30s the real server sleeps for
    - `DECLINED-TEST` → only on payment/write endpoints → rule on the
-     relevant field `equal` `"DECLINED-TEST"` → a declined-payment
-     response body
+     relevant field `equal` `"DECLINED-TEST"` → a declined-payment body
+   - `TIMEOUT-TEST` → **can't be faithfully reproduced.** There is no
+     per-response delay field in the schema — `delay` exists only on
+     `CreateEndpointRequest`/`ImportEndpoint`, i.e. the *whole endpoint*,
+     not one response on it. Setting it would slow down every request to
+     that endpoint, not just ones using `TIMEOUT-TEST`. Tell the user this
+     up front rather than silently skipping it or silently slowing down
+     the whole endpoint — let them choose.
 
-5. **Add X-API-Key enforcement last**, so it overrides everything else
-   when it fires: a rule group (Mockfly supports AND/OR grouping) —
-   header `X-API-Key` `notExists` OR `notEqual`
-   `"demo-api-key-{group_name}"` → 401 response. This is the highest
-   -priority rule on the endpoint precisely because it's added last.
+4. **`X-API-Key` enforcement**, as a `RuleGroup` with `operator: "or"`:
+   one condition with `source: "header"`, `property: "X-API-Key"`,
+   `comparator: "notExists"`; another with the same source/property,
+   comparator `"distinct"` (the schema's paired opposite of `equal"` —
+   verify against the live spec before relying on this, it isn't spelled
+   out explicitly), `value: "demo-api-key-{group_name}"` → response 401.
+
+5. **Get the mock URL.** The import call's response is a `Project`
+   object — read `slug` off it: the live mock is at
+   `https://<slug>.mockfly.dev`.
 
 6. **The one manual step**: point the demo's Stage 2 API-spec upload (or
-   whatever config in Omilia Copilot names the live API base URL) at the
-   Mockfly project's mock base URL from step 1, instead of the Render
-   deployment's URL. Nothing in this plugin has API access to Omilia
-   Copilot itself, so this one step happens in the Copilot UI, same as
-   the drag-and-drop upload demo-data-generator's own instructions
-   already describe — it just points somewhere different.
+   whatever config in Omilia Copilot names the live API base URL) at that
+   URL instead of the Render deployment's. Nothing here has API access to
+   Omilia Copilot itself, so this happens in the Copilot UI — same
+   drag-and-drop step demo-data-generator's own instructions describe,
+   pointed somewhere different.
 
-### What this gets you vs. the earlier, simpler version
+### What this gets you vs. plain import
 
 | | Import only | Full procedure above |
 |---|---|---|
 | Endpoint shapes | ✓ | ✓ |
 | Seed data matches transcripts/documents | ✗ (generic schema defaults) | ✓ |
-| Magic test values work | ✗ | ✓ |
-| X-API-Key enforced | ✗ | ✓ |
+| `ERROR-TEST` / `DECLINED-TEST` work | ✗ | ✓ |
+| `TIMEOUT-TEST` works | ✗ | ✗ — not reproducible per-response either way |
+| `X-API-Key` enforced | ✗ | ✓ |
 | Plan required | Free is fine | Paid |
+| API calls | 1 | 1 (everything assembled into one `import` body) |
 | Manual work | None | One config pointer in Copilot |
 
-Tell the user up front whether they want the fast import-only version or
-the full procedure — the full one is a lot more Mockfly API calls and
-takes longer, but is the one that actually behaves like the Render
-deployment it's replacing.
+Tell the user up front whether they want the fast plain import or the
+full procedure, and that `TIMEOUT-TEST` is a known gap either way.
 
 ## Reading Back State
 

@@ -38,8 +38,10 @@ into skill content or Bash commands anyway (only into MCP/LSP server env).
 
 Ask Claude, in plain language, once this is installed and your keys are set:
 
-- Create a mock API project from scratch, or import one from an existing
-  OpenAPI spec, Postman collection, or HAR capture
+- Create a mock API project from scratch, or convert an existing OpenAPI
+  spec (Postman/HAR too, in principle) into Mockfly's own import format
+  and create it in one call — the public API doesn't accept those files
+  directly, only the dashboard does, so Claude does that conversion itself
 - Add, edit, or delete mock endpoints and responses — including error
   cases, delays, and malformed-payload edge cases
 - Set conditional rules so a mock replies differently depending on the
@@ -67,24 +69,31 @@ by the `mockfly-projects` skill — ask for whichever fits:
 in seconds. Endpoint shapes match; responses are generic schema defaults,
 not the demo's actual seed data.
 
-**Full path — scripted end-to-end replication.** A longer sequence of
-Mockfly API calls (still all done by Claude, no dashboard clicking) that
-also recreates the seed data as real per-identifier responses, the magic
-test values (`ERROR-TEST`/`TIMEOUT-TEST`/`DECLINED-TEST`), and `X-API-Key`
-enforcement — using Mockfly's rule groups and last-match-wins ordering to
-get the priority right. Needs a paid Mockfly plan (the response count per
-endpoint blows past the free tier's cap once seed records are added). One
-step stays manual regardless: pointing the demo's API base URL at the new
-Mockfly project instead of the Render deployment, inside Omilia Copilot's
-own config — nothing here has API access to Copilot itself.
+**Full path — one `import` call, everything assembled first.** Claude
+builds the whole `{project, endpoints, responses, rules}` payload in one
+shot — seed data as real per-identifier responses, `ERROR-TEST` and
+`DECLINED-TEST` as rule-matched overrides, `X-API-Key` enforcement as a
+rule group — using last-match-wins ordering to get the priority right,
+then sends it as a single `POST /public/projects/import`. Needs a paid
+Mockfly plan (the response count per endpoint blows past the free tier's
+cap once seed records are added). `TIMEOUT-TEST` is a known gap either
+way — Mockfly's `delay` field is per-endpoint, not per-response, so
+reproducing "only this one identifier is slow" isn't possible without
+slowing the whole endpoint down. One step stays manual regardless:
+pointing the demo's API base URL (`https://<slug>.mockfly.dev`, from the
+import response) at the new Mockfly project instead of the Render
+deployment, inside Omilia Copilot's own config — nothing here has API
+access to Copilot itself.
 
 | | Fast path | Full path |
 |---|---|---|
 | Endpoint shapes | ✓ | ✓ |
 | Seed data matches transcripts/documents | ✗ | ✓ |
-| Magic test values work | ✗ | ✓ |
+| `ERROR-TEST` / `DECLINED-TEST` work | ✗ | ✓ |
+| `TIMEOUT-TEST` works | ✗ | ✗ — not reproducible either way |
 | `X-API-Key` enforced | ✗ | ✓ |
 | Plan required | Free | Paid |
+| API calls | 1 | 1 |
 | Manual steps | None | One (Copilot config pointer) |
 
 The two skills are independent and don't call each other automatically —
@@ -136,6 +145,13 @@ conversation log the same way a file would.
 - The free-plan limits documented in the skills (1 project, 4
   endpoints/project, 2 responses/endpoint) don't apply on a paid plan —
   ignore that section if you're on one.
+- **Two corrections from a later audit against the raw OpenAPI schema**
+  (parsed directly, not read as a summary): the mock server URL is
+  `https://<slug>.mockfly.dev`, not `api.mockfly.dev/mocks/{namespace}`
+  as an earlier version said; and `POST /public/projects/import` only
+  ever accepted Mockfly's own JSON shape, never a raw OpenAPI/Postman/HAR
+  file — that conversion is a dashboard-only feature. Both fixed in the
+  skills as of this version.
 
 ## Development
 

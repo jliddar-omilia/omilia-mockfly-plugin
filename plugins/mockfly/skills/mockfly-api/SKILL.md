@@ -11,7 +11,7 @@ license: MIT
 compatibility: Mockfly public REST API (api.mockfly.dev)
 metadata:
   author: Omilia — community integration, not officially maintained by Mockfly
-  version: "0.3.0"
+  version: "0.4.0"
   category: operations
 ---
 
@@ -108,14 +108,18 @@ Verify either key is visible to Claude Code's Bash tool with
 
 ## Endpoint Reference
 
+Verified directly against the raw spec (`curl -s
+https://mockfly.dev/openapi.json`, not a summarized read of it) — 10
+paths total, all listed here.
+
 ### Projects (account key)
 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/public/projects` | List accessible projects |
 | `POST` | `/public/projects` | Create an empty project |
-| `POST` | `/public/projects/import` | Create a project pre-populated from OpenAPI/Postman/HAR — check the spec for the exact body |
-| `PATCH` | `/public/projects/:projectId` | Update project name/tags (admin only) |
+| `POST` | `/public/projects/import` | Create a project with endpoints/responses in one call. **Takes Mockfly's own `{project, endpoints, folders, environment}` shape, not a raw OpenAPI/Postman/HAR file** — the dashboard converts those on upload; the API doesn't. Convert the source spec yourself first — see `mockfly-projects` |
+| `PATCH` | `/public/projects/:projectId` | Update project name/tags (admin only) — only these two fields are settable, not `useProxy`/`proxyUrl`/`allowedUsers` |
 | `DELETE` | `/public/projects/:projectId` | Delete a project (admin only) |
 
 ### Endpoints and responses (project key)
@@ -124,14 +128,20 @@ Verify either key is visible to Claude Code's Bash tool with
 |---|---|---|
 | `GET` | `/public/endpoints` | List a project's endpoints |
 | `POST` | `/public/endpoints` | Create an endpoint |
-| `GET` | `/public/endpoints/:endpointId` | Get one endpoint, responses expanded |
-| `PATCH` | `/public/endpoints/:endpointId` | Update an endpoint |
+| `GET` | `/public/endpoints/:endpointId` | Get one endpoint, responses expanded, including each response's `bodyHistory` |
+| `PATCH` | `/public/endpoints/:endpointId` | Update an endpoint — also how you set `defaultResponse` or per-endpoint `proxyConfiguration` |
 | `DELETE` | `/public/endpoints/:endpointId` | Delete an endpoint |
-| `POST` | `/public/endpoints/:endpointId/responses` | Create a mock response |
+| `POST` | `/public/endpoints/:endpointId/responses` | Create a mock response — `rules` can be included in this same call, no separate rules call needed |
 | `PATCH` | `/public/endpoints/:endpointId/responses/:responseId` | Update a response |
 | `DELETE` | `/public/endpoints/:endpointId/responses/:responseId` | Delete a response |
 | `POST` | `/public/endpoints/:endpointId/responses/:responseId/duplicate` | Duplicate a response |
-| `PUT` | `/public/endpoints/:endpointId/responses/:responseId/rules` | Replace conditional rules |
+| `PUT` | `/public/endpoints/:endpointId/responses/:responseId/rules` | Replace a response's whole rule set (full replace, not merge) |
+
+### API Hub (no auth)
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/hub/catalog` | List Mockfly's free public sample APIs — no account or key needed. Good for a quick "just give me something that works" mock, not for a specific shape |
 
 ### Example calls
 
