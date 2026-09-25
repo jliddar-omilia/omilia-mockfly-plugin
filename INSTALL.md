@@ -50,6 +50,13 @@ Then get two keys:
 
 ### 3. Set your keys as environment variables
 
+The two keys are set up differently on purpose: the **account key** is
+long-lived, so it's saved once, permanently. The **project key** changes
+often (projects here typically get created and torn down after use), so
+it's set fresh each session instead of being saved anywhere.
+
+**3a. Account key — one time, permanent:**
+
 1. Find out which shell you use:
    ```bash
    echo $SHELL
@@ -62,29 +69,51 @@ Then get two keys:
    nano ~/.zshrc
    ```
 
-3. Move to the end of the file and add these two lines, with your real
-   keys in place of the placeholders:
+3. Move to the end of the file and add this line, with your real account
+   key in place of the placeholder:
    ```bash
    export MOCKFLY_ACCOUNT_API_KEY="paste_your_account_key_here"
-   export MOCKFLY_API_KEY="paste_your_project_key_here"
    ```
 
 4. Save: **Control+O**, then **Enter**. Exit: **Control+X**.
 
 5. Close the terminal window and open a new one (env vars only load in
-   *new* terminal sessions).
+   *new* terminal sessions). You never need to do this again unless the
+   key is rotated.
+
+**3b. Project key — every time you start work on a project:**
+
+In the terminal, right before you run `claude`, paste this with your
+current project's key (get a fresh one from that project's settings page
+each time you switch projects):
+
+```bash
+export MOCKFLY_API_KEY="paste_your_project_key_here"
+claude
+```
+
+This only lasts for that terminal window/session — that's intentional, so
+old project keys don't pile up in your shell config. When you move to a
+new (or new-again) project, open a new terminal and repeat this step with
+the new key.
+
+**Paste project keys into your terminal prompt, never into a message to
+Claude** — a key typed into chat gets stored in the conversation log the
+same way a file would.
 
 ### 4. Verify
 
-In the new terminal:
+In the terminal where you ran the commands above:
 
 ```bash
 echo $MOCKFLY_ACCOUNT_API_KEY
 echo $MOCKFLY_API_KEY
 ```
 
-**What you should see:** both keys printed back, not blank lines. If
-either is blank, redo step 3 — it didn't save correctly.
+**What you should see:** both keys printed back, not blank lines. If the
+account key is blank, redo 3a. If the project key is blank, you're in a
+different terminal than the one where you ran 3b — export it again in
+this one.
 
 ### 5. Try it
 
@@ -136,32 +165,54 @@ Same as macOS/Linux:
 
 ### 3. Set your keys as environment variables
 
-In PowerShell, run these two commands with your real keys in place of the
-placeholders:
+Same asymmetric setup as macOS/Linux: the **account key** is saved once,
+permanently. The **project key** changes often (projects here typically
+get created and torn down after use), so it's set fresh each session
+instead.
+
+**3a. Account key — one time, permanent:**
 
 ```powershell
 setx MOCKFLY_ACCOUNT_API_KEY "paste_your_account_key_here"
-setx MOCKFLY_API_KEY "paste_your_project_key_here"
 ```
 
-**What you should see:** `SUCCESS: Specified value was saved.` twice.
-`setx` saves the variable permanently for your Windows user account — you
-don't need to edit any profile file.
+**What you should see:** `SUCCESS: Specified value was saved.`
+`setx` saves it permanently for your Windows user account — no profile
+file to edit.
 
 Close this PowerShell window and open a new one (`setx` only takes effect
-in *new* windows, not the one you ran it from).
+in *new* windows). You never need to do this again unless the key rotates.
+
+**3b. Project key — every time you start work on a project:**
+
+In PowerShell, right before you run `claude`, paste this with your
+current project's key:
+
+```powershell
+$env:MOCKFLY_API_KEY = "paste_your_project_key_here"
+claude
+```
+
+This only lasts for that window/session, unlike `setx` — that's
+intentional, so old project keys don't accumulate. New project, new key:
+open a new PowerShell window and repeat this step.
+
+**Paste project keys into PowerShell directly, never into a message to
+Claude** — a key typed into chat gets stored in the conversation log the
+same way a file would.
 
 ### 4. Verify
 
-In the new PowerShell window:
+In the PowerShell window where you ran the commands above:
 
 ```powershell
 echo $env:MOCKFLY_ACCOUNT_API_KEY
 echo $env:MOCKFLY_API_KEY
 ```
 
-**What you should see:** both keys printed back, not blank lines. If
-either is blank, redo step 3.
+**What you should see:** both keys printed back, not blank lines. If the
+account key is blank, redo 3a in a new window. If the project key is
+blank, you're in a different window than the one where you ran 3b.
 
 ### 5. Try it
 

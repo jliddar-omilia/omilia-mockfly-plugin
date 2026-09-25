@@ -1,14 +1,14 @@
 {
   "name": "mockfly",
   "displayName": "Mockfly",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Manage Mockfly hosted mock APIs from Claude Code by calling its public REST API directly: create/import projects, edit endpoints and responses, set conditional rules, and run mocks offline.",
   "author": {
     "name": "Jimmy Liddar",
     "email": "jliddar@omilia.com"
   },
   "homepage": "https://mockfly.dev/docs/public-api/",
-  "repository": "https://github.com/liddar12/omilia-mockfly-plugin",
+  "repository": "https://github.com/jliddar-omilia/omilia-mockfly-plugin",
   "license": "MIT",
   "keywords": ["mockfly", "mock-api", "testing", "api-mocking"]
 }

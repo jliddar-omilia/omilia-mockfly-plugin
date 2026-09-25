@@ -2,18 +2,29 @@
 
 ## Environment
 
-**`curl` calls get 401 even though you set the env vars**
-- Check the var is visible to the *current* shell: `echo $MOCKFLY_API_KEY`.
-  If empty, either it was set in a different shell/tab, or it's only in a
-  project `.env` that was never `source`d before starting Claude Code.
-- Whitespace or quotes copied in from the dashboard can end up embedded in
-  the value. Re-export cleanly: `export MOCKFLY_API_KEY="$(cat key.txt |
+**`MOCKFLY_ACCOUNT_API_KEY` is empty**
+- It's meant to be permanent, set once in a shell profile. Check
+  `echo $MOCKFLY_ACCOUNT_API_KEY`. If empty, it was either never added to
+  `~/.zshrc`/`~/.bash_profile` (or `setx` on Windows), or you're in a
+  terminal opened *before* it was set — open a new one.
+
+**`MOCKFLY_API_KEY` is empty**
+- This one is intentionally session-scoped, not saved anywhere permanent
+  — it's expected to go empty whenever a new terminal/session starts
+  without re-exporting it. That's by design, not a bug: tell the user to
+  export it fresh in their terminal (`export MOCKFLY_API_KEY="..."` /
+  `$env:MOCKFLY_API_KEY = "..."` on Windows) before starting this Claude
+  Code session, then confirm. Never ask them to paste the raw value into
+  chat instead.
+
+**Whitespace or quotes embedded in a copied key**
+- Re-export cleanly: `export MOCKFLY_API_KEY="$(cat key.txt |
   tr -d '[:space:]')"` if in doubt, or just retype it.
 
-**Works in one project, not another**
-- You're using per-project `.env` scoping and this project doesn't have
-  one, or has a stale key. Env vars don't inherit across unrelated shells —
-  only from the shell that actually launched this Claude Code session.
+**Works in one terminal, not another**
+- Expected for the project key (session-scoped by design). For the
+  account key, it means the profile file edit didn't happen in the shell
+  you're now using — check you edited the right one (`echo $SHELL`).
 
 ## Authentication
 

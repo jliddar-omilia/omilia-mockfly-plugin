@@ -11,7 +11,7 @@ license: MIT
 compatibility: Mockfly public REST API (api.mockfly.dev)
 metadata:
   author: Omilia — community integration, not officially maintained by Mockfly
-  version: "0.2.0"
+  version: "0.3.0"
   category: operations
 ---
 
@@ -46,40 +46,65 @@ bodies are not.
 
 ## Authentication
 
-Two independent keys. Set both as plain environment variables — **not**
-Claude Code plugin config, since sensitive plugin `userConfig` values don't
-substitute into skill content or Bash commands, only into MCP/LSP server
-env. A shell env var is what actually reaches a `curl` call here.
+Two independent keys, with deliberately different lifetimes — this is the
+default setup, not a fallback:
 
-| Key | Suggested env var | Scope | Used for |
+| Key | Env var | Lifetime | Setup |
 |---|---|---|---|
-| Account API key | `MOCKFLY_ACCOUNT_API_KEY` | Account | `/public/projects*` |
-| Project API key | `MOCKFLY_API_KEY` | One project | `/public/endpoints*` |
+| Account API key | `MOCKFLY_ACCOUNT_API_KEY` | Long-lived — set once | Shell profile, persists forever |
+| Project API key | `MOCKFLY_API_KEY` | Short-lived — projects get created and torn down often | Per-session export, never saved to a profile |
 
-### Set them up
+Neither goes through Claude Code plugin config (`userConfig`) — sensitive
+plugin config values don't substitute into skill content or Bash commands,
+only into MCP/LSP server env. A shell env var is what actually reaches a
+`curl` call here.
 
-Global (works in every project, every session):
+### Account key — one-time setup
 
-```bash
-# add to ~/.zshrc or ~/.bashrc, then restart your shell / Claude Code session
-export MOCKFLY_ACCOUNT_API_KEY="mf_..."
-export MOCKFLY_API_KEY="..."
-```
-
-Per-project instead (if different projects use different Mockfly accounts):
+Add to `~/.zshrc` / `~/.bash_profile` (macOS/Linux) or set with `setx`
+(Windows) once, and never touch it again unless it's rotated:
 
 ```bash
-# in the project's .env (gitignored!), then `source .env` before starting Claude Code
-MOCKFLY_ACCOUNT_API_KEY=mf_...
-MOCKFLY_API_KEY=...
+export MOCKFLY_ACCOUNT_API_KEY="mf_..."   # then open a new terminal
 ```
 
-Verify Claude Code's Bash tool can see them: `echo $MOCKFLY_API_KEY` should
-print the key, not an empty line, in a fresh session.
+### Project key — quick per-session setup (the default)
 
-**Never** paste a raw key value into chat, into a file this skill writes,
-or into a command whose output gets logged/shared. Reference the env var by
-name in commands (`$MOCKFLY_API_KEY`), never the literal value.
+Projects here are typically temporary and torn down after use, so don't
+add this one to a profile file — that just accumulates stale keys.
+Instead, export it fresh in the terminal, for that session only, right
+before starting Claude Code:
+
+```bash
+export MOCKFLY_API_KEY="paste_here"   # in your terminal — not in this chat
+claude
+```
+
+Windows PowerShell equivalent (also session-only, not `setx`):
+
+```powershell
+$env:MOCKFLY_API_KEY = "paste_here"
+claude
+```
+
+Got a new project and need a new key mid-session? Tell the user to run
+the export in a **new terminal window**, restart the Claude Code session
+in it, and confirm — the running session's Bash tool won't pick up a
+change made in a different, already-running shell.
+
+### Rule for Claude, not just the user
+
+**Never ask the user to paste the raw key value into chat**, for either
+key — not even for a "temporary, low-risk" project key. A key pasted into
+a message becomes part of the stored conversation log, which is exactly
+what pasting it anywhere else would also do. If either env var comes back
+empty when checked (`echo $MOCKFLY_API_KEY`), give the user the exact
+export command to run themselves in their own terminal and ask them to
+confirm once done — the same pattern as the account key's one-time setup,
+just without adding it to a profile file.
+
+Verify either key is visible to Claude Code's Bash tool with
+`echo $MOCKFLY_API_KEY` — should print the key, not an empty line.
 
 ## Endpoint Reference
 
