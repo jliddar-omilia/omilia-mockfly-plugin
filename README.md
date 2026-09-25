@@ -56,7 +56,8 @@ This is a plain marketplace + plugin directory, no build step:
 
 ```
 .claude-plugin/marketplace.json     # marketplace listing
-plugins/mockfly/.claude-plugin/plugin.json   # plugin manifest + MCP config
+plugins/mockfly/.claude-plugin/plugin.json   # plugin manifest, userConfig
+plugins/mockfly/.mcp.json                    # MCP server config (see gotcha below)
 plugins/mockfly/skills/              # the three skills
 ```
 
@@ -69,3 +70,21 @@ claude plugin validate .
 
 To test a local edit against a running session, load it directly with
 `--plugin-dir ./plugins/mockfly` instead of installing from the marketplace.
+
+### Gotchas found while building this
+
+- **MCP servers must go in `.mcp.json` at the plugin root, not inline in
+  `plugin.json`.** An inline `mcpServers` key in `plugin.json` validates
+  clean but the server silently never loads (confirmed on this Claude Code
+  build with an isolated throwaway test plugin, not just this one). Filed
+  as feedback; don't revert this to inline until that's fixed upstream.
+- **Bump `version` in `plugin.json` after every edit, even for a local
+  `directory`-sourced marketplace.** Installs are cached per-version at
+  `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/`, and that
+  cache is *not* refreshed on `marketplace update` / reinstall unless the
+  version string actually changes — contrary to what the docs say about
+  local-directory sources picking up edits automatically. Also filed as
+  feedback.
+- After bumping the version, `claude plugin uninstall` +
+  `claude plugin install ... --config KEY=VALUE` is the fastest way to force
+  a clean re-cache and re-set sensitive config in one shot.

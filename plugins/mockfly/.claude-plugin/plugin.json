@@ -1,7 +1,7 @@
 {
   "name": "mockfly",
   "displayName": "Mockfly",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Manage Mockfly hosted mock APIs from Claude Code: create/import projects, edit endpoints and responses, set conditional rules, and run mocks offline.",
   "author": {
     "name": "Jimmy Liddar",
