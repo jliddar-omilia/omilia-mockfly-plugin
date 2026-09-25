@@ -152,6 +152,17 @@ conversation log the same way a file would.
   ever accepted Mockfly's own JSON shape, never a raw OpenAPI/Postman/HAR
   file — that conversion is a dashboard-only feature. Both fixed in the
   skills as of this version.
+- **A 5-case eval suite (`plugins/mockfly/evals/`) has actually been run**
+  (`claude plugin eval .`, not just written) — 5/5 passing as of this
+  version. See [Regression suite](#regression-suite) below.
+- **The demo-data-generator "full path" import procedure is still
+  unverified against the real Mockfly API** — it's designed against the
+  schema, not observed working. `scripts/verify-mockfly-import.sh` builds
+  the exact payload the skill documents (embedded rules, last-match-wins
+  ordering, the `distinct` comparator for the auth check), checks the
+  live behavior, then deletes the test project — but it needs someone
+  with a real `MOCKFLY_ACCOUNT_API_KEY` to actually run it. Do that before
+  trusting the "full path" on a real demo.
 
 ## Development
 
@@ -161,6 +172,7 @@ Plain marketplace + plugin directory, no build step:
 .claude-plugin/marketplace.json              # marketplace listing
 plugins/mockfly/.claude-plugin/plugin.json   # plugin manifest
 plugins/mockfly/skills/                      # the three skills
+plugins/mockfly/evals/                       # behavior regression suite (claude plugin eval)
 ```
 
 To iterate locally without publishing:
@@ -172,6 +184,30 @@ claude plugin validate .
 
 To test a local edit against a running session, load it directly with
 `--plugin-dir ./plugins/mockfly` instead of installing from the marketplace.
+
+### Regression suite
+
+```
+cd plugins/mockfly
+claude plugin eval . --scaffold --trust-plugin
+```
+
+Five cases, none of them call the real Mockfly API — they check Claude's
+behavior and explanations against fixtures, not live network calls, so
+running the suite doesn't create real projects or cost Mockfly plan
+usage. `--scaffold` is required: the `import-requires-conversion` case
+copies a fixture OpenAPI file into the run's workspace via a
+`scaffold_script`, and is skipped/weaker without it. Covers:
+
+- The account-key-vs-project-key setup gets explained correctly (asymmetric lifetimes, no request to paste a key into chat)
+- A key pasted into the prompt anyway gets refused, not used or echoed back
+- Project creation walks the calls in the right order with the right key per step
+- An OpenAPI import is explained as "convert first, then one call" — not a raw-file passthrough
+- Unrelated requests don't trigger any of the three skills
+
+Each judge-graded run is a real model call against your account's usage
+— cheap for 5 cases at `--runs 1 --ablation none`, more if you restore
+the default 3 runs × with/without-plugin comparison.
 
 ### Gotchas found while building this
 

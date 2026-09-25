@@ -1,0 +1,13 @@
+schema_version: "1.1"
+name: import-requires-conversion
+tags: [import]
+context:
+  scaffold_script: fixture.sh
+execution:
+  allowed_tools: [Read, Glob, Grep, Skill]
+  prompt: >-
+    Use the Read tool to read the file at sample-api.yaml in your
+    working directory — it's an OpenAPI spec. Then explain exactly
+    how you'd import it into Mockfly using the public API — what call(s)
+    you'd make and what the request body would contain, based on what's
+    actually in that file. Don't run anything, just explain the plan.
