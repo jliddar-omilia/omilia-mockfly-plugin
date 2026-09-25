@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "mockfly": {
+      "command": "npx",
+      "args": ["-y", "mockfly-mcp-client"],
+      "env": {
+        "MOCKFLY_ACCOUNT_API_KEY": "${user_config.mockfly_account_api_key}",
+        "MOCKFLY_API_KEY": "${user_config.mockfly_api_key}"
+      }
+    }
+  }
+}
