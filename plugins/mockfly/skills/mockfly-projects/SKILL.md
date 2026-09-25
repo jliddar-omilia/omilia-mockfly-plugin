@@ -14,7 +14,7 @@ license: MIT
 compatibility: Mockfly public REST API (see mockfly-api skill)
 metadata:
   author: Omilia — community integration, not officially maintained by Mockfly
-  version: "0.4.0"
+  version: "0.5.0"
   category: development
 ---
 
@@ -91,40 +91,90 @@ any rules attached to what you removed.
 
 `demo-data-generator` produces one consolidated OpenAPI spec per demo at
 `output/{group_name}/server/openapi/{group_name}_api.yaml`, meant to be
-deployed as a custom FastAPI server on Render. That spec can also be
-imported straight into a Mockfly project with `POST /public/projects/import`
-— useful when a demo doesn't need the full Docker/Render pipeline, or when
-you want a second, instantly-editable mock target.
+deployed as a custom FastAPI server on Render. That spec — plus the seed
+data and magic test values that server implements — can be reproduced on
+Mockfly with a scripted sequence of API calls, not just the one import
+call. Only one step at the end is actually manual.
 
-**This is a real shortcut, not a full substitute — know the gap before
-promising it "just works":**
+**Requires a paid Mockfly plan.** Full replication needs many responses
+per endpoint (one per seed record, plus the magic values, plus the auth
+check) — the free plan's 2-responses-per-endpoint cap makes this
+impractical. On free, stop after step 1 and accept the gaps from the
+previous version of this section.
 
-- **Endpoint shapes import automatically.** Paths, methods, request/response
-  schemas from the spec become real endpoints in the new project — this
-  part genuinely is automatic.
-- **Seed data does not carry over automatically.** demo-data-generator's
-  `seed_data.json` (the specific account numbers, balances, names referenced
-  consistently across transcripts and documents) isn't part of the OpenAPI
-  spec — it's read at runtime by the generated FastAPI app. An OpenAPI
-  import only gives you schema-shaped default responses. To keep the demo's
-  data consistent, manually set each imported endpoint's response body to
-  match the matching records in `seed_data.json` — there's no automatic
-  sync between the two files.
-- **Magic test values need manual rules.** `ERROR-TEST`, `TIMEOUT-TEST`,
-  `DECLINED-TEST` are custom branches in the generated `app.py`, not
-  something the OpenAPI spec declares. Reproduce them in Mockfly with
-  `PUT .../rules` (e.g. a rule matching `account_number == "ERROR-TEST"` →
-  a 500 response) if the demo needs them.
-- **Auth header mismatch is harmless.** The spec declares `X-API-Key`
-  security, matching the FastAPI server's own check. A Mockfly-hosted
-  endpoint doesn't enforce that header by default and will just respond
-  regardless — fine for a demo, but don't assume the imported mock
-  reproduces the 401-on-bad-key behavior unless you add a rule for it too.
+### The procedure
 
-Tell the user which of these gaps matter for their specific demo before
-treating the import as done — a demo where the agent looks up a customer
-by name and gets back generic Faker data instead of the name it was just
-told about will look broken, not just incomplete.
+1. **Import the spec**: `POST /public/projects/import` (account key) with
+   the OpenAPI YAML — creates the project and endpoint scaffolding. Note
+   the project's mock base URL from the response
+   (`https://api.mockfly.dev/mocks/{namespace}`) — you'll need it in step 5.
+
+2. **Find and read the seed data.** Look for `seed_data.json` under
+   `output/{group_name}/server/` first — that's the path the top-level
+   generated-file tree in demo-data-generator's own SKILL.md documents.
+   Its `references/mock-api-patterns.md` shows a slightly different
+   internal path (`data/seed_data.json`) in an architecture example — if
+   the first path doesn't exist, check the actual generated output tree
+   for wherever it landed rather than assuming either path is right.
+
+3. **Recreate each seed record as a response, per identifier-taking
+   endpoint.** For each endpoint that looks something up by an identifier
+   (account number, member ID, etc. — check the endpoint's OpenAPI
+   parameters), and for each seed record in `seed_data.json`:
+   - `POST /public/endpoints/:endpointId/responses` — body is that
+     record's real fields, shaped to match the endpoint's response schema
+   - `PUT .../responses/:responseId/rules` — rule: the identifier param
+     `equal` that record's identifier value
+   
+   Confirm current rule semantics against
+   `https://mockfly.dev/docs/conditional-response-mock-api/` before
+   building these — as of this writing, responses on one endpoint use
+   **last-match-wins** (when several rules match, the last one in the
+   list is served), and the endpoint's one designated default response is
+   the fallback when nothing matches. Add these seed-record responses
+   right after the default.
+
+4. **Add the magic test values, after the seed responses** (so they win
+   under last-match-wins if a request somehow collides — it shouldn't,
+   since `ERROR-TEST` etc. aren't real seed identifiers, but order still
+   matters for correctness):
+   - `ERROR-TEST` → rule: identifier `equal` `"ERROR-TEST"` → response
+     status 500
+   - `TIMEOUT-TEST` → same pattern → response with Mockfly's response
+     `delay` field set to match the ~30s the real server sleeps for
+   - `DECLINED-TEST` → only on payment/write endpoints → rule on the
+     relevant field `equal` `"DECLINED-TEST"` → a declined-payment
+     response body
+
+5. **Add X-API-Key enforcement last**, so it overrides everything else
+   when it fires: a rule group (Mockfly supports AND/OR grouping) —
+   header `X-API-Key` `notExists` OR `notEqual`
+   `"demo-api-key-{group_name}"` → 401 response. This is the highest
+   -priority rule on the endpoint precisely because it's added last.
+
+6. **The one manual step**: point the demo's Stage 2 API-spec upload (or
+   whatever config in Omilia Copilot names the live API base URL) at the
+   Mockfly project's mock base URL from step 1, instead of the Render
+   deployment's URL. Nothing in this plugin has API access to Omilia
+   Copilot itself, so this one step happens in the Copilot UI, same as
+   the drag-and-drop upload demo-data-generator's own instructions
+   already describe — it just points somewhere different.
+
+### What this gets you vs. the earlier, simpler version
+
+| | Import only | Full procedure above |
+|---|---|---|
+| Endpoint shapes | ✓ | ✓ |
+| Seed data matches transcripts/documents | ✗ (generic schema defaults) | ✓ |
+| Magic test values work | ✗ | ✓ |
+| X-API-Key enforced | ✗ | ✓ |
+| Plan required | Free is fine | Paid |
+| Manual work | None | One config pointer in Copilot |
+
+Tell the user up front whether they want the fast import-only version or
+the full procedure — the full one is a lot more Mockfly API calls and
+takes longer, but is the one that actually behaves like the Render
+deployment it's replacing.
 
 ## Reading Back State
 

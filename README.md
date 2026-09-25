@@ -49,8 +49,9 @@ Ask Claude, in plain language, once this is installed and your keys are set:
   with no cloud dependency
 - Import a `demo-data-generator`-produced OpenAPI spec into a new Mockfly
   project as a faster alternative (or second target) to its Docker/Render
-  deployment — see [Works with demo-data-generator](#works-with-demo-data-generator)
-  below for what does and doesn't come along automatically
+  deployment — either a quick shape-only import, or a fuller scripted
+  replication including seed data and magic test values; see
+  [Works with demo-data-generator](#works-with-demo-data-generator) below
 
 ## Works with demo-data-generator
 
@@ -59,21 +60,37 @@ demo environments, including one consolidated OpenAPI spec per demo at
 `output/{group_name}/server/openapi/{group_name}_api.yaml`, normally
 deployed as a custom FastAPI app on Render.
 
-That spec can be imported directly into Mockfly (`mockfly-projects` skill
-covers this) as a faster, no-Docker alternative or a second live mock
-target. **This is a partial, not total, automation** — be clear about the
-difference before relying on it for a live demo:
+That spec can be imported directly into Mockfly. Two levels, both covered
+by the `mockfly-projects` skill — ask for whichever fits:
 
-| Carries over automatically | Needs manual work after import |
-|---|---|
-| Endpoint paths, methods, request/response shapes | The specific seed data (`seed_data.json` records) that transcripts and documents reference by name/account number |
-| — | Magic test values (`ERROR-TEST`, `TIMEOUT-TEST`, `DECLINED-TEST`) — these are custom server logic, not part of the spec |
-| — | `X-API-Key` enforcement — Mockfly won't reject requests missing it unless you add a rule for that too |
+**Fast path — import only.** One API call, works on the free plan, done
+in seconds. Endpoint shapes match; responses are generic schema defaults,
+not the demo's actual seed data.
+
+**Full path — scripted end-to-end replication.** A longer sequence of
+Mockfly API calls (still all done by Claude, no dashboard clicking) that
+also recreates the seed data as real per-identifier responses, the magic
+test values (`ERROR-TEST`/`TIMEOUT-TEST`/`DECLINED-TEST`), and `X-API-Key`
+enforcement — using Mockfly's rule groups and last-match-wins ordering to
+get the priority right. Needs a paid Mockfly plan (the response count per
+endpoint blows past the free tier's cap once seed records are added). One
+step stays manual regardless: pointing the demo's API base URL at the new
+Mockfly project instead of the Render deployment, inside Omilia Copilot's
+own config — nothing here has API access to Copilot itself.
+
+| | Fast path | Full path |
+|---|---|---|
+| Endpoint shapes | ✓ | ✓ |
+| Seed data matches transcripts/documents | ✗ | ✓ |
+| Magic test values work | ✗ | ✓ |
+| `X-API-Key` enforced | ✗ | ✓ |
+| Plan required | Free | Paid |
+| Manual steps | None | One (Copilot config pointer) |
 
 The two skills are independent and don't call each other automatically —
 this only happens when you (or Claude, prompted by you) explicitly hand the
 generated OpenAPI file to `mockfly-projects`' import workflow in the same
-session.
+session. See that skill for the exact call sequence.
 
 ## Install
 
