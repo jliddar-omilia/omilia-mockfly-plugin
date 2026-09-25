@@ -14,7 +14,7 @@ license: MIT
 compatibility: Mockfly public REST API (see mockfly-api skill)
 metadata:
   author: Omilia — community integration, not officially maintained by Mockfly
-  version: "0.6.0"
+  version: "0.7.0"
   category: development
 ---
 
@@ -33,7 +33,7 @@ name here; Mockfly can add fields without notice.
 
 | Term | Meaning |
 |---|---|
-| Project | A container of mock endpoints. Its mock server is served at `https://<slug>.mockfly.dev`, where `slug` comes back on the `Project` object from create/import — **not** `api.mockfly.dev/mocks/{namespace}`, despite what an earlier version of this file said |
+| Project | A container of mock endpoints. Its mock server is served at `https://api.mockfly.dev/mocks/{slug}`, where `slug` comes back on the `Project` object from create/import. (An earlier version of this file said `https://<slug>.mockfly.dev` instead, trusting the OpenAPI schema's English description over testing it — that gives NXDOMAIN, confirmed against both a throwaway and a real project. Verified via `scripts/verify-mockfly-import.sh` — see the repo's Status section) |
 | Endpoint | One mocked route: a method + path (e.g. `GET /users/:id`) |
 | Response | One possible reply for an endpoint — status, body, `isEnabled`, `rules` |
 | Rules | Conditions (`Rule` or a `RuleGroup` of them) that pick which response fires for a given request |
@@ -60,7 +60,7 @@ API-side override. Doesn't apply on a paid plan.
 
 ### Start a mock project from scratch
 
-1. `POST /public/projects` (account key) — name it, get back a project id, `slug` (its mock URL: `https://<slug>.mockfly.dev`), and `privateApiKey` (the project key — save it, it's only returned here and on update)
+1. `POST /public/projects` (account key) — name it, get back a project id, `slug` (its mock URL: `https://api.mockfly.dev/mocks/{slug}`), and `privateApiKey` (the project key — save it, it's only returned here and on update)
 2. `POST /public/endpoints` (project key) — define method + path
 3. `POST /public/endpoints/:endpointId/responses` — attach at least one response. **Include `rules` directly in this call** (`CreateResponseRequest` takes a `rules` array) rather than following up with a separate `PUT .../rules` call — same result, one fewer round trip.
 
@@ -200,13 +200,16 @@ described in "What this gets you" below.
 4. **`X-API-Key` enforcement**, as a `RuleGroup` with `operator: "or"`:
    one condition with `source: "header"`, `property: "X-API-Key"`,
    `comparator: "notExists"`; another with the same source/property,
-   comparator `"distinct"` (the schema's paired opposite of `equal"` —
-   verify against the live spec before relying on this, it isn't spelled
-   out explicitly), `value: "demo-api-key-{group_name}"` → response 401.
+   comparator `"distinct"`, `value: "demo-api-key-{group_name}"` →
+   response 401. Verified end to end with `scripts/verify-mockfly-import.sh`:
+   both a missing header and a present-but-wrong one correctly return
+   401, confirming `distinct` really does mean "not equal to" here.
 
 5. **Get the mock URL.** The import call's response is a `Project`
    object — read `slug` off it: the live mock is at
-   `https://<slug>.mockfly.dev`.
+   `https://api.mockfly.dev/mocks/{slug}` (confirmed live, not just
+   read off the schema — see the repo's Status section for the URL
+   pattern this replaced).
 
 6. **The one manual step**: point the demo's Stage 2 API-spec upload (or
    whatever config in Omilia Copilot names the live API base URL) at that

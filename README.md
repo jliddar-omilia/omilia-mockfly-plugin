@@ -74,16 +74,20 @@ builds the whole `{project, endpoints, responses, rules}` payload in one
 shot — seed data as real per-identifier responses, `ERROR-TEST` and
 `DECLINED-TEST` as rule-matched overrides, `X-API-Key` enforcement as a
 rule group — using last-match-wins ordering to get the priority right,
-then sends it as a single `POST /public/projects/import`. Needs a paid
-Mockfly plan (the response count per endpoint blows past the free tier's
-cap once seed records are added). `TIMEOUT-TEST` is a known gap either
-way — Mockfly's `delay` field is per-endpoint, not per-response, so
-reproducing "only this one identifier is slow" isn't possible without
-slowing the whole endpoint down. One step stays manual regardless:
-pointing the demo's API base URL (`https://<slug>.mockfly.dev`, from the
-import response) at the new Mockfly project instead of the Render
-deployment, inside Omilia Copilot's own config — nothing here has API
-access to Copilot itself.
+then sends it as a single `POST /public/projects/import`. **Verified end
+to end against the real API** (`scripts/verify-mockfly-import.sh`, 8/8
+checks passing): seed rules, the `ERROR-TEST` override, the default
+fallback, and — the one that actually proves last-match-wins — the
+auth-check rule correctly overriding a seed match with a 401 when the
+key's missing or wrong. Needs a paid Mockfly plan (the response count
+per endpoint blows past the free tier's cap once seed records are
+added). `TIMEOUT-TEST` is a known gap either way — Mockfly's `delay`
+field is per-endpoint, not per-response, so reproducing "only this one
+identifier is slow" isn't possible without slowing the whole endpoint
+down. One step stays manual regardless: pointing the demo's API base URL
+(`https://api.mockfly.dev/mocks/{slug}`, from the import response) at
+the new Mockfly project instead of the Render deployment, inside Omilia
+Copilot's own config — nothing here has API access to Copilot itself.
 
 | | Fast path | Full path |
 |---|---|---|
@@ -145,24 +149,34 @@ conversation log the same way a file would.
 - The free-plan limits documented in the skills (1 project, 4
   endpoints/project, 2 responses/endpoint) don't apply on a paid plan —
   ignore that section if you're on one.
-- **Two corrections from a later audit against the raw OpenAPI schema**
-  (parsed directly, not read as a summary): the mock server URL is
-  `https://<slug>.mockfly.dev`, not `api.mockfly.dev/mocks/{namespace}`
-  as an earlier version said; and `POST /public/projects/import` only
-  ever accepted Mockfly's own JSON shape, never a raw OpenAPI/Postman/HAR
-  file — that conversion is a dashboard-only feature. Both fixed in the
-  skills as of this version.
+- **The mock server URL took two tries to get right, and the second try
+  is the one that's actually been tested.** An audit against the raw
+  OpenAPI schema (parsed directly, not read as a summary) initially
+  "corrected" the URL to `https://<slug>.mockfly.dev`, trusting the
+  schema's English description of `Project.slug` over testing it. That
+  gives NXDOMAIN — confirmed against both a throwaway test project and
+  Jimmy's real, long-standing one, ruling out propagation delay as the
+  cause. The real pattern, confirmed by an actual live request that
+  returned a mock-engine-shaped error rather than a generic 404, is
+  `https://api.mockfly.dev/mocks/{slug}` — the same shape an earlier,
+  pre-audit version of this file already had, before that audit
+  overwrote it with the wrong "fix." Fixed again, this time verified,
+  not just re-read from a different source.
+- `POST /public/projects/import` only ever accepted Mockfly's own JSON
+  shape, never a raw OpenAPI/Postman/HAR file — that conversion is a
+  dashboard-only feature. This one *is* still correct as documented.
 - **A 5-case eval suite (`plugins/mockfly/evals/`) has actually been run**
   (`claude plugin eval .`, not just written) — 5/5 passing as of this
   version. See [Regression suite](#regression-suite) below.
-- **The demo-data-generator "full path" import procedure is still
-  unverified against the real Mockfly API** — it's designed against the
-  schema, not observed working. `scripts/verify-mockfly-import.sh` builds
-  the exact payload the skill documents (embedded rules, last-match-wins
-  ordering, the `distinct` comparator for the auth check), checks the
-  live behavior, then deletes the test project — but it needs someone
-  with a real `MOCKFLY_ACCOUNT_API_KEY` to actually run it. Do that before
-  trusting the "full path" on a real demo.
+- **The demo-data-generator "full path" import procedure has been
+  verified end to end against the real Mockfly API**
+  (`scripts/verify-mockfly-import.sh`, 8/8 checks) — seed-data rules,
+  the `ERROR-TEST` override, the no-rule default fallback, and
+  last-match-wins actually overriding a seed match with the auth-check's
+  401 when the key's missing or wrong. This is what caught the URL bug
+  above — the script failed with `NXDOMAIN` on the first (wrong) URL,
+  which is what triggered fixing it for real instead of leaving it as a
+  documented assumption.
 
 ## Development
 
