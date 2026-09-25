@@ -5,14 +5,16 @@ description: >-
   and conditional rules by calling Mockfly's public REST API. Use when asked
   to spin up a mock API, turn an OpenAPI/Postman/HAR file into mock
   endpoints, add or change a mock response, or make a mock respond
-  differently based on the request. Trigger terms: mock API, mock endpoint,
-  Mockfly project, import OpenAPI, import Postman collection, conditional
-  response, mock rules.
+  differently based on the request. Also use when asked to turn
+  demo-data-generator's output into a live mock backend on Mockfly instead
+  of (or alongside) its Render deployment. Trigger terms: mock API, mock
+  endpoint, Mockfly project, import OpenAPI, import Postman collection,
+  conditional response, mock rules, demo-data-generator, demo mock API.
 license: MIT
 compatibility: Mockfly public REST API (see mockfly-api skill)
 metadata:
   author: Omilia — community integration, not officially maintained by Mockfly
-  version: "0.2.0"
+  version: "0.4.0"
   category: development
 ---
 
@@ -84,6 +86,45 @@ Don't silently overwrite an existing default response when the ask is to
 `PATCH` on a project/endpoint/response changes in place and keeps the same
 id — prefer this over delete+recreate, since delete also drops history and
 any rules attached to what you removed.
+
+## Using with demo-data-generator
+
+`demo-data-generator` produces one consolidated OpenAPI spec per demo at
+`output/{group_name}/server/openapi/{group_name}_api.yaml`, meant to be
+deployed as a custom FastAPI server on Render. That spec can also be
+imported straight into a Mockfly project with `POST /public/projects/import`
+— useful when a demo doesn't need the full Docker/Render pipeline, or when
+you want a second, instantly-editable mock target.
+
+**This is a real shortcut, not a full substitute — know the gap before
+promising it "just works":**
+
+- **Endpoint shapes import automatically.** Paths, methods, request/response
+  schemas from the spec become real endpoints in the new project — this
+  part genuinely is automatic.
+- **Seed data does not carry over automatically.** demo-data-generator's
+  `seed_data.json` (the specific account numbers, balances, names referenced
+  consistently across transcripts and documents) isn't part of the OpenAPI
+  spec — it's read at runtime by the generated FastAPI app. An OpenAPI
+  import only gives you schema-shaped default responses. To keep the demo's
+  data consistent, manually set each imported endpoint's response body to
+  match the matching records in `seed_data.json` — there's no automatic
+  sync between the two files.
+- **Magic test values need manual rules.** `ERROR-TEST`, `TIMEOUT-TEST`,
+  `DECLINED-TEST` are custom branches in the generated `app.py`, not
+  something the OpenAPI spec declares. Reproduce them in Mockfly with
+  `PUT .../rules` (e.g. a rule matching `account_number == "ERROR-TEST"` →
+  a 500 response) if the demo needs them.
+- **Auth header mismatch is harmless.** The spec declares `X-API-Key`
+  security, matching the FastAPI server's own check. A Mockfly-hosted
+  endpoint doesn't enforce that header by default and will just respond
+  regardless — fine for a demo, but don't assume the imported mock
+  reproduces the 401-on-bad-key behavior unless you add a rule for it too.
+
+Tell the user which of these gaps matter for their specific demo before
+treating the import as done — a demo where the agent looks up a customer
+by name and gets back generic Faker data instead of the name it was just
+told about will look broken, not just incomplete.
 
 ## Reading Back State
 

@@ -4,6 +4,20 @@ For anyone at Omilia who wants Claude Code to manage Mockfly mock APIs
 directly. Takes about 5 minutes. No admin approval needed — this plugin
 doesn't use an MCP server, so it isn't affected by any MCP allowlist policy.
 
+Once installed, you can ask Claude things like:
+
+- "Create a mock API project called X" / "import this OpenAPI spec as a mock"
+- "Add an endpoint that returns a 500 when the account number is ERROR-TEST"
+- "List my Mockfly projects" / "show me what's on this endpoint"
+- "Serve my mocks offline" (via the separate `mockfly-cli` tool)
+- Building an Omilia Copilot demo with `demo-data-generator`? Its generated
+  OpenAPI spec can be imported into Mockfly as a faster alternative to a
+  full Docker/Render deploy — ask Claude to do that once both are set up.
+  See the main [README](README.md#works-with-demo-data-generator) for what
+  carries over automatically and what doesn't.
+
+Full capability list: [README.md](README.md#capabilities).
+
 Pick your OS below: [macOS / Linux](#macos--linux) or [Windows](#windows).
 
 ## Prerequisites
