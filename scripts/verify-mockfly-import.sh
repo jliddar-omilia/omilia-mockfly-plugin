@@ -101,32 +101,67 @@ PASS=$((PASS+1))
 
 echo
 echo "== 3. Testing behavior against the live mock =="
-sleep 2  # give the mock server a moment to be reachable
+
+# curl -s -o /dev/null -w on a network-level failure (DNS not yet
+# propagated, connection refused, TLS not ready) exits non-zero, and
+# under `set -e` that kills the whole script with no explanation. Never
+# let a single curl call do that: capture stderr, print it on failure,
+# and return the "000" sentinel instead of aborting.
+curl_code() {
+  local url="$1"; shift
+  local err
+  local code
+  if ! code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$url" "$@" 2>/tmp/verify-mockfly-curl-err.$$); then
+    err=$(cat /tmp/verify-mockfly-curl-err.$$)
+    rm -f /tmp/verify-mockfly-curl-err.$$
+    echo "  (curl failed at the network level: $err)" >&2
+    echo "000"
+    return
+  fi
+  rm -f /tmp/verify-mockfly-curl-err.$$
+  echo "$code"
+}
 
 ENDPOINT="$MOCK_URL/api/v1/billing/get_account_information"
 
-code_ac001=$(curl -s -o /dev/null -w "%{http_code}" "$ENDPOINT?account_number=AC001" -H "X-API-Key: $API_KEY_VALUE")
-check "AC001 with correct key -> 200" "200" "$code_ac001"
+echo "Waiting for $MOCK_URL to become reachable..."
+READY=0
+for i in $(seq 1 15); do
+  code=$(curl_code "$ENDPOINT?account_number=AC001" -H "X-API-Key: $API_KEY_VALUE")
+  if [ "$code" != "000" ]; then
+    READY=1
+    break
+  fi
+  echo "  not reachable yet (attempt $i/15), waiting 3s..."
+  sleep 3
+done
 
-code_ac002=$(curl -s -o /dev/null -w "%{http_code}" "$ENDPOINT?account_number=AC002" -H "X-API-Key: $API_KEY_VALUE")
-check "AC002 with correct key -> 200" "200" "$code_ac002"
+if [ "$READY" -eq 0 ]; then
+  echo "FAIL  mock never became reachable after 45s — see curl errors above"
+  FAIL=$((FAIL+1))
+else
+  check "AC001 with correct key -> 200" "200" "$code"
 
-code_error=$(curl -s -o /dev/null -w "%{http_code}" "$ENDPOINT?account_number=ERROR-TEST" -H "X-API-Key: $API_KEY_VALUE")
-check "ERROR-TEST with correct key -> 500" "500" "$code_error"
+  code_ac002=$(curl_code "$ENDPOINT?account_number=AC002" -H "X-API-Key: $API_KEY_VALUE")
+  check "AC002 with correct key -> 200" "200" "$code_ac002"
 
-code_unknown=$(curl -s -o /dev/null -w "%{http_code}" "$ENDPOINT?account_number=NOBODY" -H "X-API-Key: $API_KEY_VALUE")
-check "unknown identifier -> 404 (default)" "404" "$code_unknown"
+  code_error=$(curl_code "$ENDPOINT?account_number=ERROR-TEST" -H "X-API-Key: $API_KEY_VALUE")
+  check "ERROR-TEST with correct key -> 500" "500" "$code_error"
 
-code_no_header=$(curl -s -o /dev/null -w "%{http_code}" "$ENDPOINT?account_number=AC001")
-check "AC001, no X-API-Key -> 401 (auth overrides seed match)" "401" "$code_no_header"
+  code_unknown=$(curl_code "$ENDPOINT?account_number=NOBODY" -H "X-API-Key: $API_KEY_VALUE")
+  check "unknown identifier -> 404 (default)" "404" "$code_unknown"
 
-code_wrong_header=$(curl -s -o /dev/null -w "%{http_code}" "$ENDPOINT?account_number=AC001" -H "X-API-Key: wrong-value")
-check "AC001, wrong X-API-Key -> 401 (distinct comparator works)" "401" "$code_wrong_header"
+  code_no_header=$(curl_code "$ENDPOINT?account_number=AC001")
+  check "AC001, no X-API-Key -> 401 (auth overrides seed match)" "401" "$code_no_header"
+
+  code_wrong_header=$(curl_code "$ENDPOINT?account_number=AC001" -H "X-API-Key: wrong-value")
+  check "AC001, wrong X-API-Key -> 401 (distinct comparator works)" "401" "$code_wrong_header"
+fi
 
 echo
 echo "== 4. Cleaning up test project =="
-DELETE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "https://api.mockfly.dev/public/projects/$PROJECT_ID" \
-  -H "Authorization: $MOCKFLY_ACCOUNT_API_KEY")
+DELETE_CODE=$(curl_code "https://api.mockfly.dev/public/projects/$PROJECT_ID" \
+  -X DELETE -H "Authorization: $MOCKFLY_ACCOUNT_API_KEY")
 check "test project deleted -> 200" "200" "$DELETE_CODE"
 
 rm -f "$PAYLOAD_FILE" "$PAYLOAD_FILE.meta"
